@@ -8,7 +8,7 @@ published: true
 
 # 概要
 
-可変数のどれかのchannelと通信するには、reflect.Selectを利用することで実現できます。
+可変個のどれかのchannelと通信するには、reflect.Selectを利用することで実現できます。
 ここでは、その使い方とどのような状況で利用すべきかについて説明します。
 
 # 通常の方法と課題
@@ -30,10 +30,10 @@ func main() {
 }
 ```
 
-しかし、上記の例のように明示的にcaseでchannelとそれとの通信（送受信）を指定する必要があります。したがって、可変数のchannelを受け取って、そのうちのどれかと通信できるまで待つことがこれだとできません。
+しかし、上記の例のように明示的にcaseでchannelとそれとの通信（送受信）を指定する必要があります。したがって、可変個のchannelを受け取って、そのうちのどれかと通信できるまで待つことがこれだとできません。
 
 # reflect.Selectの利用
-可変数のchannelのうちどれかと通信できるまで待つには、[reflect.Select](https://golang.org/pkg/reflect/#Select)を利用することで実現できます。
+可変個のchannelのうちどれかと通信できるまで待つには、[reflect.Select](https://golang.org/pkg/reflect/#Select)を利用することで実現できます。
 
 ```go
 func Select(cases []SelectCase) (chosen int, recv Value, recvOK bool)
