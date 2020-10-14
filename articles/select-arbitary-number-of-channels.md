@@ -2,7 +2,7 @@
 title: "reflect.Selectを使って任意の個数のchannelと通信する"
 emoji: "👌"
 type: "tech" # tech: 技術記事 / idea: アイデア
-topics: []
+topics: ["go"]
 published: true
 ---
 

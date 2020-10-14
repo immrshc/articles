@@ -19,6 +19,6 @@
   "homepage": "https://github.com/shoichiimamura/articles#readme",
   "dependencies": {
     "node-gyp": "^7.1.0",
-    "zenn-cli": "^0.1.35"
+    "zenn-cli": "^0.1.49"
   }
 }
