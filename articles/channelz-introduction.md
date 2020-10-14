@@ -337,6 +337,7 @@ func main() {
 まずクライアント側のChannelzサーバーにRPCしてクライアント側保持している情報を確認します。ここでは、[channlez.GetTopChannels](https://pkg.go.dev/google.golang.org/grpc/internal/channelz#GetTopChannels)を呼び出しています。
 
 ```shell
+$ echo {} | evans -r -p 50050 cli call grpc.channelz.v1.Channelz.GetTopChannels | jq .
 {
   "channel": [
     {
@@ -554,4 +555,4 @@ grpc-go（ここでのバージョンは1.32）の実装を見てみると以下
   - https://github.com/grpc/grpc-go/blob/v1.32.x/clientconn.go#L307
   - https://github.com/grpc/grpc-go/blob/v1.32.x/balancer/base/balancer.go#L107
   - https://github.com/grpc/grpc-go/blob/v1.32.x/balancer_conn_wrappers.go#L140
-  - https://github.com/grpc/grpc-go/blob/revert-3938-release_version_1.33.0/clientconn.go#L744
+  - https://github.com/grpc/grpc-go/blob/v1.32.x/clientconn.go#L736
