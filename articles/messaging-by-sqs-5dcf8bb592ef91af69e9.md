@@ -27,13 +27,7 @@ published: true
 - すぐにリクエストが処理される
 - リクエスト先のサービスの呼び出し方を知る必要がある
 
-```plantuml
-@startuml
-rectangle client 
-rectangle server
-client -> server
-@enduml
-```
+![1](https://storage.googleapis.com/zenn-user-upload/mqv53souiav1uizf0ys7plu1li71)
 
 非同期的な通信はプロデューサー（あるいはパブリッシャー、センダー）がメッセージを生成し、複数のコンシューマー（あるいはサブスクライバー、レシーバー）が消費する形式になります。
 
@@ -47,20 +41,7 @@ client -> server
 - 送信からメッセージが処理されるまでタイムラグが発生する
 - プロデューサーはメッセージブローカーの呼び出し方を知る必要がある
 
-```plantuml
-@startuml
-
-rectangle producer 
-rectangle consumer
-rectangle "message broker" {
-    queue channel
-}
-
-producer -> channel
-channel -> consumer
-
-@enduml
-```
+![2](https://storage.googleapis.com/zenn-user-upload/9b3dgge5ke9wsiy5ieyfgrezegey)
 
 同期的・非同期的な通信の特徴を比較するとそれぞれ使い分けができます。
 
@@ -90,26 +71,7 @@ channel -> consumer
 SQSのキューもポイントツーポイントチャンネルで、コンシューマーが受信するとメッセージが削除されるか、指定時間を越えるまで他のコンシューマーから受信されなくなります。
 c.f. [VisibilityTimeout](https://docs.aws.amazon.com/ja_jp/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html)
 
-```plantuml
-@startuml
-left to right direction
-
-rectangle producer 
-rectangle consumer1
-rectangle consumer2
-
-rectangle "message broker" {
-    queue channel
-}
-
-producer --> channel
-note on link: message x
-channel --> consumer1
-note on link: message x
-channel --> consumer2
-
-@enduml
-```
+![3](https://storage.googleapis.com/zenn-user-upload/30avbp3lzs7uwzl11d30ohthpumk)
 
 ### パブリッシュ・サブスクライブ
 
@@ -120,27 +82,7 @@ channel --> consumer2
 SNSでメッセージの通知先と複数のSQSのキューを対応づけることで、プロデューサーが一つのメッセージをSNSに送信しSQSをパブリッシュ・サブスクライブのように利用することができます。
 c.f. [キューへのファンアウト](https://docs.aws.amazon.com/ja_jp/sns/latest/dg/sns-sqs-as-subscriber.html)
 
-```plantuml
-@startuml
-left to right direction
-
-rectangle producer 
-rectangle consumer1
-rectangle consumer2
-
-rectangle "message broker" {
-    queue channel
-}
-
-producer --> channel
-note on link: message x
-channel --> consumer1
-note on link: message x
-channel --> consumer2
-note on link: message x
-
-@enduml
-```
+![4](https://storage.googleapis.com/zenn-user-upload/z0stsmlk2an2alt6yewe9oancz3h)
 
 # メッセージの順序保証
 
@@ -169,24 +111,7 @@ c.f. [Dissecting SQS FIFO Queues — Does Ordered and Exactly Once Messaging Rea
 
 まずチャンネルに送信するプロデューサーが複数あり、一つのプロデューサーがチャンネルへ送信失敗した場合を考えます。
 
-```plantuml
-@startuml
-participant producer1 as p1
-participant producer2 as p2
-participant "message broker" as mb
-participant consumer1 as c1
-
-p1 ->x mb: message1
-p2 -> mb: message2
-mb --> p2: ok
-c1 -> mb: fetch
-mb --> c1: message2
-p1 -> mb: message1
-mb --> p1: ok
-c1 -> mb: fetch
-mb --> c1: message1
-@enduml
-```
+![5](https://storage.googleapis.com/zenn-user-upload/vvxiwllnrf96ds1ddkychwrhzgu5)
 
 上の図はプロデューサーがメッセージ１（一番目のメッセージ）の送信に失敗し、別のプロデューサーがメッセージ２（二番目のメッセージ）が次に送信に成功した場合を表しています。
 
@@ -198,26 +123,7 @@ mb --> c1: message1
 
 次にチャンネルから受け取るコンシューマーが複数ある場合を考えます。
 
-```plantuml
-@startuml
-participant producer1 as p1
-participant "message broker" as mb
-participant consumer1 as c1
-participant consumer2 as c2
-participant database as db
-
-p1 -> mb: message1
-p1 -> mb: message2
-c1 -> mb: fetch
-mb -> c1: message1
-c1 -> c1: start to process
-c2 -> mb: fetch
-mb -> c2: message2
-c2 -> c2: start to process
-c2 -> db: commit
-c1 -> db: commit
-@enduml
-```
+![6](https://storage.googleapis.com/zenn-user-upload/4zgb6meav505f7nuat7vocyts32h)
 
 上の図はあるコンシューマーがメッセージ１を処理中に別のコンシューマーがメッセージ２を先に処理し終えた場合を表します。
 
@@ -250,18 +156,7 @@ SQSのFIFOキューはメッセージの重複排除もサポートしていま�
 
 しかし、最初のメッセージの送信から5分経過してから重複したメッセージを送った場合はexactly-onceになりません。
 
-```plantuml
-@startuml
-participant producer1 as p1
-participant "message broker" as mb
-
-p1 -> mb: message1（deduplication id: 123）
-mb --> mb: enqueue
-...5 minutes latter...
-p1 -> mb: message1（deduplication id: 123）
-mb --> mb: enqueue
-@enduml
-```
+![7](https://storage.googleapis.com/zenn-user-upload/3pbyoqyw5gi7t3f4g646wi48v9x2)
 
 ### コンシューマー側が重複してメッセージを受信
 
@@ -274,27 +169,7 @@ SQSの場合はメッセージを受信しても自動的に削除しません�
 
 しかし、処理時間が設定より長い場合や処理が終わり結果がコミットされた後に削除のAPI呼び出しに失敗した場合などがあるとVisibilityTimeoutの超過が起こります。
 
-```plantuml
-@startuml
-participant producer1 as p1
-participant "message broker" as mb
-participant consumer1 as c1
-participant consumer2 as c2
-participant database as db
-
-p1 -> mb: message1
-c1 -> mb: fetch
-mb --> c1: message1
-c1 -> c1: start to process
-...visibility timeout expires...
-c2 -> mb: fetch
-mb --> c2: message1
-c2 -> c2: start to process
-c2 -> db: commit
-c1 -> db: commit
-
-@enduml
-```
+![8](https://storage.googleapis.com/zenn-user-upload/3d5k04hqcuvkjvsxx21s8koozlw6)
 
 上の図はコンシューマーが処理に時間がかかりVisibilityTimeoutを過ぎたため、他のコンシューマーが同じメッセージを受信してしまう場合を表します。
 
@@ -321,20 +196,7 @@ c.f. [Pattern: Idempotent Consume](https://microservices.io/patterns/communicati
 
 通常メッセージは送信側のアプリケーションでデータの作成や変更を伴った結果、発生します。例えば従業員が事業所に招待（作成）された結果、その従業員へメールをメッセージブローカー経由で送信する場合などです。その場合、従業員レコードを挿入しコミットした後に、メッセージを送信することになります。
 
-```plantuml
-@startuml
-participant service as s
-participant database as db
-participant "message broker" as mb
-
-group transaction
-s -> db: start transaction
-s -> db: save business logic change
-s -> db: commit transaction
-end
-s ->x mb: message
-@enduml
-```
+![9](https://storage.googleapis.com/zenn-user-upload/385j2o4dmjlpwzwwros0qgx6f83y)
 
 しかし、上の図のようにコミットして送信前にアプリケーションがクラッシュする場合やメッセージブローカーが受信できない場合が考えられます。そうなるとメッセージを伴う操作はコミットされているにも関わらずメッセージは失われます。
 
@@ -347,27 +209,7 @@ c.f. [The Outbox Pattern](http://www.kamilgrzybek.com/design/the-outbox-pattern/
 
 メッセージはアプリケーションと同じデータストアの別テーブル（outbox）などで管理され、メッセージを伴う処理とメッセージの永続化の対応関係が保証されます。
 
-```plantuml
-@startuml
-participant service as s
-participant database as db
-participant "outbox processor" as op
-participant "message broker" as mb
-
-group transaction
-s -> db: start transaction
-s -> db: save business logic change
-s -> db: save message to outbox
-s -> db: commit transaction
-end
-loop
-op -> db: fetch from outbox
-db --> op: message
-op -> mb: message
-op -> db: set message sent
-end
-@enduml
-```
+![10](https://storage.googleapis.com/zenn-user-upload/1amnkf82m8205xddqv1skdismshz)
 
 このプロデューサーはoutboxから送信未完了のメッセージを読み取り、送信に失敗してもリトライします。そして送信に成功した場合は対応するoutboxのレコードのステータスを処理済みにするか、それ自体を削除します。
 
