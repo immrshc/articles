@@ -20,9 +20,11 @@ IO-Boundな処理は、netpollerが別のカーネルスレッドで非同期で
 goroutineの使用時には以下の観点を留意する必要が計測から分かりました。
 
 - goroutineを使う場合はコンテキストスイッチのコストとトレードオフになる
-- CPU-Boundなgoroutineは並列処理の恩恵を受けやすい
-- IO-Boundなgoroutineは並行処理の恩恵を受けやすい
+- CPU-Boundなgoroutineは並列処理の恩恵を受ける場合がある
+- IO-Boundなgoroutineは並行処理の恩恵を受ける場合がある
 - IO-Boundなgoroutineはnetpollerの並列数がボトルネックになる
+
+※ 若干表現が誤解を生みそうだったので修正しました
 
 環境変数`GODEBUG`を使うことで、Goのスケジューラの状態を確認して仮説を検証することができます。
 
@@ -220,8 +222,8 @@ BenchmarkDoConcurrently-8             16          67286300 ns/op
 これまでの計測から分かることは以下になります。
 
 - goroutineを使う場合はコンテキストスイッチのコストとトレードオフになる
-- CPU-Boundなgoroutineは並列処理の恩恵を受けやすい
-- IO-Boundなgoroutineは並行処理の恩恵を受けやすい
+- CPU-Boundなgoroutineは並列処理の恩恵を受ける場合がある
+- IO-Boundなgoroutineは並行処理の恩恵を受ける場合がある
 - IO-Boundなgoroutineはnetpollerの並列数がボトルネックになる
 
 # スケジューラの挙動
