@@ -14,7 +14,6 @@ goroutineを使ってパフォーマンスを改善する際に、どれくら�
 ## 要約
 
 goroutineはカーネルスレッドとM:Nの関係になっています。そしてカーネルスレッドごとにgoroutineのキューがあり、Goのスケジューラが順次実行していきます。
-
 IO-Boundな処理は、netpollerが別のカーネルスレッドで非同期でシステムコールを実行するので他のgoroutineをブロックしないようになっています。
 
 goroutineの使用時には以下の観点を留意する必要が計測から分かりました。
@@ -22,11 +21,11 @@ goroutineの使用時には以下の観点を留意する必要が計測から�
 - goroutineを使う場合はコンテキストスイッチのコストとトレードオフになる
 - CPU-Boundなgoroutineは並列処理の恩恵を受ける場合がある
 - IO-Boundなgoroutineは並行処理の恩恵を受ける場合がある
-- IO-Boundなgoroutineはnetpollerの並列数がボトルネックになる
 
-※ 若干表現が誤解を生みそうだったので修正しました
+環境変数`GODEBUG`を使うことで、Goのスケジューラの状態を確認して仮説を検証することができます。検証すると以下の観点を留意する必要が分かりました。
 
-環境変数`GODEBUG`を使うことで、Goのスケジューラの状態を確認して仮説を検証することができます。
+- IO-Boundなgoroutineの並行数を増やしてもnetpollerのスレッド数がボトルネックになる
+- 単純にGOPAXPROCSの値を増やしてもIO-Boundなgoroutineのパフォーマンスが上がるわけではない
 
 # goroutineの仕組み
 
@@ -187,10 +186,10 @@ func DoConcurrently(cncrtNum int) {
 	var wg sync.WaitGroup
 	for i := 0; i < cncrtNum; i++ {
 		wg.Add(1)
-		go func(i int) {
+		go func() {
 			defer wg.Done()
 			request()
-		}(i)
+		}()
 	}
 	wg.Wait()
 }
@@ -215,7 +214,7 @@ BenchmarkDoConcurrently-8             16          67286300 ns/op
 そして、`BenchmarkDo`と`BenchmarkDoConcurrently`を比べるとgoroutineを使った並行処理によりパフォーマンスが改善したことが分かります。
 
 ![](https://storage.googleapis.com/zenn-user-upload/lbh73matcrx11pxjo8kb577e043h)
-上の図のように、並行処理されるgoroutineの数が100くらいになるまでリクエストあたりの時間は短くなりました。しかし、それを超えると速度は改善しませんでした。おそらくgoroutineやnetpollerのスレッドが増えコンテキストスイッチのオーバーヘッドが大きくなったためかと思われます。
+上の図のように、並行処理されるgoroutineの数が100くらいになるまでリクエストあたりの時間は短くなりました。しかし、それを超えると速度は改善しませんでした。おそらくgoroutineやnetpollerのスレッドのコンテキストスイッチのオーバーヘッドが大きくなったためかと思われます。
 
 ## 計測から分かること
 
@@ -224,7 +223,6 @@ BenchmarkDoConcurrently-8             16          67286300 ns/op
 - goroutineを使う場合はコンテキストスイッチのコストとトレードオフになる
 - CPU-Boundなgoroutineは並列処理の恩恵を受ける場合がある
 - IO-Boundなgoroutineは並行処理の恩恵を受ける場合がある
-- IO-Boundなgoroutineはnetpollerの並列数がボトルネックになる
 
 # スケジューラの挙動
 
@@ -235,16 +233,36 @@ https://golang.org/pkg/runtime/
 > scheddetail: setting schedtrace=X and scheddetail=1 causes the scheduler to emit detailed multiline info every X milliseconds, describing state of the scheduler, processors, threads and goroutines.
 > schedtrace: setting schedtrace=X causes the scheduler to emit a single line to standard error every X milliseconds, summarizing the scheduler state.
 
-`DoConcurrently(100)`で100回のリクエストを並行で実行した結果が以下になります。
+`GOPAXPROCS=1`で`DoConcurrently`を実行した結果が以下になります。
 
 ```go
-$ GOMAXPROCS=1 GODEBUG=schedtrace=50 go run grtne.go
-SCHED 0ms: gomaxprocs=1 idleprocs=0 threads=4 spinningthreads=0 idlethreads=0 runqueue=0 [0]
-SCHED 60ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=3 [8]
-SCHED 111ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=1 [0]
-SCHED 165ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=0 runqueue=0 [2]
-SCHED 223ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=0 [9]
-SCHED 281ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=2 [4]
+// DoConcurrently(20)
+$ GOMAXPROCS=1 GODEBUG=schedtrace=50 go run tmp/grtne/grtne.go
+SCHED 0ms: gomaxprocs=1 idleprocs=0 threads=4 spinningthreads=0 idlethreads=1 runqueue=0 [0]
+SCHED 51ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=2 [16]
+SCHED 105ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=1 [13]
+SCHED 161ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=0 [1]
+SCHED 220ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=1 [9]
+SCHED 277ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=1 [9]
+SCHED 328ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=2 [7]
+// DoConcurrently(50)
+$ GOMAXPROCS=1 GODEBUG=schedtrace=50 go run tmp/grtne/grtne.go
+SCHED 0ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=0 [0]
+SCHED 50ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=9 [2]
+SCHED 110ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=2 [8]
+SCHED 162ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=1 [2]
+SCHED 218ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=1 [9]
+SCHED 275ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=1 [7]
+SCHED 332ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=2 [7]
+// DoConcurrently(100)
+$ GOMAXPROCS=1 GODEBUG=schedtrace=50 go run tmp/grtne/grtne.go
+SCHED 0ms: gomaxprocs=1 idleprocs=0 threads=4 spinningthreads=0 idlethreads=1 runqueue=0 [0]
+SCHED 51ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=0 runqueue=2 [14]
+SCHED 106ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=2 [14]
+SCHED 163ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=1 [1]
+SCHED 222ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=3 [8]
+SCHED 278ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=3 [6]
+SCHED 334ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 runqueue=1 [1]
 ```
 
 各実行時ごとの項目の意味は以下になります。
@@ -254,20 +272,37 @@ SCHED 281ms: gomaxprocs=1 idleprocs=0 threads=5 spinningthreads=0 idlethreads=1 
 - spinningthreads: 実行できるgoroutineを見つけられないスレッド数
 - idlethreads: idle状態なスレッド数
 - runqueue: GRQに積まれたgoroutineの数
-- \[n, m, ...]: 各LQRに積まれたgoroutineの数
+- \[n, m, ...]: 各LRQに積まれたgoroutineの数
 
-確かに`GOMAXPROCS=1`によりLQRの数は一つになっているのが分かります。
+確かに`GOMAXPROCS=1`によりLRQの数は一つになっているのが分かります。
+
+また、goroutineの数を増やしても、全体のスレッド数（threads）は変わっていないので、goroutineの数がnetpollerのスレッド数に影響を与えないと考えられます。したがって、IO-Boundなgoroutineの並行数を増やしてもパフォーマンスに効果があるのは限度があることが推測されます。また先ほどgoroutineの数を増やし過ぎてパフォーマンスが下がったのは、スレッドではなくGoのスケジューラのコンテキストスイッチのコストに起因すると考えられます。
+
 今度は、`GOMAXPROCS=4`とすると以下のようになりました。
 
 ```go
-$ GOMAXPROCS=4 GODEBUG=schedtrace=50 go run grtne.go
-SCHED 0ms: gomaxprocs=4 idleprocs=1 threads=6 spinningthreads=1 idlethreads=0 runqueue=0 [0 0 0 0]
-SCHED 57ms: gomaxprocs=4 idleprocs=0 threads=10 spinningthreads=0 idlethreads=3 runqueue=0 [0 0 0 0]
-SCHED 115ms: gomaxprocs=4 idleprocs=3 threads=10 spinningthreads=0 idlethreads=5 runqueue=0 [0 0 0 0]
-SCHED 166ms: gomaxprocs=4 idleprocs=3 threads=11 spinningthreads=0 idlethreads=7 runqueue=6 [0 2 0 0]
+// DoConcurrently(20)
+$ GOMAXPROCS=4 GODEBUG=schedtrace=50 go run tmp/grtne/grtne.go
+SCHED 0ms: gomaxprocs=4 idleprocs=3 threads=6 spinningthreads=0 idlethreads=3 runqueue=0 [0 0 0 0]
+SCHED 57ms: gomaxprocs=4 idleprocs=2 threads=10 spinningthreads=0 idlethreads=4 runqueue=0 [0 0 0 0]
+SCHED 114ms: gomaxprocs=4 idleprocs=0 threads=10 spinningthreads=1 idlethreads=3 runqueue=0 [0 0 0 0]
+SCHED 170ms: gomaxprocs=4 idleprocs=2 threads=12 spinningthreads=0 idlethreads=6 runqueue=1 [0 0 0 0]
+// DoConcurrently(50)
+$ GOMAXPROCS=4 GODEBUG=schedtrace=50 go run tmp/grtne/grtne.go
+SCHED 0ms: gomaxprocs=4 idleprocs=2 threads=6 spinningthreads=1 idlethreads=2 runqueue=0 [0 0 0 0]
+SCHED 54ms: gomaxprocs=4 idleprocs=3 threads=10 spinningthreads=0 idlethreads=5 runqueue=0 [0 0 0 0]
+SCHED 113ms: gomaxprocs=4 idleprocs=1 threads=10 spinningthreads=1 idlethreads=4 runqueue=0 [0 0 0 0]
+SCHED 169ms: gomaxprocs=4 idleprocs=0 threads=11 spinningthreads=0 idlethreads=3 runqueue=1 [1 2 0 0]
+// DoConcurrently(100)
+$ GOMAXPROCS=4 GODEBUG=schedtrace=50 go run tmp/grtne/grtne.go
+SCHED 0ms: gomaxprocs=4 idleprocs=3 threads=7 spinningthreads=0 idlethreads=3 runqueue=0 [0 0 0 0]
+SCHED 59ms: gomaxprocs=4 idleprocs=3 threads=10 spinningthreads=0 idlethreads=5 runqueue=0 [0 0 0 0]
+SCHED 116ms: gomaxprocs=4 idleprocs=2 threads=10 spinningthreads=0 idlethreads=4 runqueue=0 [0 0 0 0]
+SCHED 170ms: gomaxprocs=4 idleprocs=0 threads=10 spinningthreads=0 idlethreads=3 runqueue=1 [0 0 0 0]
 ```
 
-Pが増えた分、全体のスレッド数（M）が増えたことが分かります。そして、その分スレッドのコンテキストスイッチも大きくなると考えられます。
+GOMAXPROCS(=P)が増え、threads（スレッド数）が増えたことが分かります。
+しかし、`threads - GOMAXPROCS`の値はあまり変わらないので、ユーザーレベルのコード以外を実行するスレッドには影響がなさそうだと分かります。つまりGOMAXPROCSの数がnetpollerのスレッド数に影響を与えるとは考えづらいことが分かります。そして、idlethreadsも増えているので、IO-Boundなgoroutineの場合は単純にGOMAXPROCSを増やしてもあまり意味がないことが分かります。
 
 # 参考
 - goroutineの仕組みに関して
