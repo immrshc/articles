@@ -213,29 +213,23 @@ func NewRequestWithContext(ctx context.Context, method, url string, body io.Read
 これらを参考に以下のように実装することができます。`Trasport.roundTrip`の実装と異なり、`Request.GetBody`が無い場合は、元の内容を読み取って返す関数をセットしてあげます。[`io.NopCloser`](https://golang.org/pkg/io/#NopCloser)を使うことで、何もしない`io.Closer`インターフェースを実装することができます。
 
 ```go
-func rewindBody(req *http.Request) (*http.Request, error) {
+func rewindBody(req *http.Request) (func () (io.ReadCloser, error), error) {
+	defer req.Body.Close()
 	if req.Body == nil || req.Body == http.NoBody {
-		return req, nil
+		return func() (io.ReadCloser, error) {
+			return req.Body, nil
+		}, nil
 	}
-	if req.GetBody == nil {
-		buf, err := io.ReadAll(req.Body)
-		if err != nil {
-			return nil, err
-		}
-		req.GetBody = func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(buf)), nil
-		}
+	if req.GetBody != nil {
+		return req.GetBody, nil
 	}
-	if err := req.Body.Close(); err != nil {
-		return nil, err
-	}
-	body, err := req.GetBody()
+	buf, err := io.ReadAll(req.Body)
 	if err != nil {
 		return nil, err
 	}
-	newReq := *req
-	newReq.Body = body
-	return &newReq, nil
+	return func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(buf)), nil
+	}, nil
 }
 ```
 
@@ -243,12 +237,12 @@ func rewindBody(req *http.Request) (*http.Request, error) {
 ```go
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	var attemptNum int
+	getBody, err := rewindBody(req)
+	...
 	for {
 		attemptNum++
-		req, err := rewindBody(req)
-		if err != nil {
-			return nil, err
-		}
+		req.Body, err := getBody()
+		...
 		res, err := c.HTTPClient.Do(req)
 		...
 	}
